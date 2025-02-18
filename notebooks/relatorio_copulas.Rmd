@@ -1,0 +1,887 @@
+---
+title: "Trabalho 2 - Cópulas"
+author: "Monique Lohane Xavier Silva"
+date: "05/05/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Resumo
+
+  Os índices no mercado financeiro tem o objetivo de sumarizar informações de uma certa quantidade de empresas, ou de seguimentos específicos do mercado, mostrando assim o comportamento como um todo da economia. Serão avaliados neste trabalho dois índices que possuem determinadas características. O Russell 2000, é um índice composto por empresas de pequena captalização. Já o MSCI (Emerging Markets) é composto por empresas de 26 países com economia emergente. Serão feitas analises individuais para esses dois índices, com o objetivo de encontrar uma medida de risco, o Value at Risk (VaR) e identificar o domínio de atração máximal das distribuições; e posteriormente, uma avaliação conjunta utilizando a metodologia de Cópulas, para determinar o VaR bivariado e a cópula que mais representa os dados.
+
+
+## Introdução
+
+  No mercado financeiro é comum ter índices, tais como DowJones, S&P500 e Nasdaq, que servem como referência do comportamento da economia. Estes também medem o desempenho de empresas da bolsa de valores com determinadas características. O S&P 500, por exemplo, é composto pelas 500 maiores empresas de capital aberto nos Estados Unidos. as maiores empresas são mega-ações com grandes nomes conhecidos, como a Apple, a Microsoft, a Amazon, o Facebook, dentre outros; a Ibovespa é composta pelos ativos com maior volume de negociação na Bolsa de Valores do Brasil (B3), tais como Vale, Petrobrás, Bradesco, Banco do Brasil. 
+  Assim como esses dois índices, existem outros que apresentam diferentes características. O índice Russell 2000, mede o desempenho de aproximadamente 2.000 empresas de pequena capitalização no Índice Russell 3000, este composto por 3.000 das maiores ações dos EUA, e representa aproximadamente 8% da capitalização total do mercado do Russell 3000. a maior empresa do índice é avaliada em pouco mais de US\$ 5 bilhões e empresas, em média, com valor de US\$ 1 bilhão. As suas maiores empresas são Kite Pharma, Gramercy Property REIT Trust e a MKS Instruments. Para fins de analise e comparabilidade, selecionou-se outro índice que é compoesto de ativos apenas de países emergentes, o MSCI (Emerging Markets). 
+  Serão feitas análises dos dados de ambos índices, tendo como finalidade aplicar uma modelagem das distribuições Alpha-estável, Generalized Extreme Value (GEV) e **(Weibull?)** visto que essas famílias de distribuições são mais adequadas para dados financeiros; e conjuntamente, aplicar modelagem de cópulas.
+  
+
+## O Índice Russell 2000
+
+  Como já mencionado, o índice Russell 2000, mede o desempenho de aproximadamente 2.000 empresas de pequena capitalização no Índice Russell 3000, este composto por 3.000 das maiores ações dos EUA. Pode surgir o questionamento do motivo pelo qual há interesse em investir em _small caps_ ou empresas de pequena capitalização, ao em ves de investir em grandes empresas concentradas, por exemplo, no S&P 500. A resposta de muitos investidores a esse interesse no índice é que a grande geração de empregos nos EUA é acometida às empresas de pequena capitalização, e não nas grandes empresas. 
+  Os dados sobre o Russell 2000 foram obtidos no site Yahoo Finance (https://finance.yahoo.com/quote/%5ERUT?p=%5ERUT). Para as análises, seriam utilizados dados no período de 06/02/2020 a 05/02/2021, que neste trabalho, com fins de facilitar o entendimento, será chamado de "Período 1". Porém, foi um período que concentrou a fase da pandemia de Covid-19, e optou-se por aumentar o período para 06/02/2018 a 05/02/2021, denominado "Período 2", de forma que permitisse observar os efeitos da pandemia em um cenário mais geral. Os gráficos a seguir mostram o comportamento dos logretornos do Índice Russell 2000, sendo que o primeiro gráfico apresenta os logretornos no Período 1 e o segundo no Período 2.
+
+```{r, echo=FALSE,warning=FALSE,message=FALSE}
+
+require(pacman)
+
+p_load(tibble, PerformanceAnalytics, fExtremes, evd, VGAM, kableExtra, DT, extremis, copula, evmix, ismev, extRemes, knitr, 
+       stabledist, StableEstim, fBasics, copula, lubridate, tidyverse)
+
+if (length(args) > 1){
+  pasta_raiz = args[1]
+}else{
+  pasta_raiz = dirname(rstudioapi::getSourceEditorContext()$path)
+}
+
+setwd(paste0(pasta_raiz,"./../data/raw"))
+russell <- read.csv("RUT.csv")
+russell1 <- read.csv("RUT1ano.csv")
+
+```
+
+
+
+```{r, echo=TRUE}
+# Cirando variáveis de retorno e logretorno do Periodo 2
+russell$retorno <- russell$High/dplyr::lag(russell$High)
+russell$logretorno <- log(russell$retorno)
+russell$logretorno <- ifelse(is.na(russell$logretorno),0, russell$logretorno)
+ret <- russell$logretorno
+## RUSSELL - selecionando as variaveis de estudo
+logret_rus <- russell$logretorno
+ret_rus <- russell$retorno
+High_rus <- russell$High
+```
+
+```{r, echo=TRUE}
+# Cirando variáveis de retorno e logretorno do Periodo 1
+russell1$retorno <- russell1$High/dplyr::lag(russell1$High)
+russell1$logretorno <- log(russell1$retorno)
+russell1$logretorno <- ifelse(is.na(russell1$logretorno),0, russell1$logretorno)
+
+## RUSSELL - selecionando as variaveis de estudo
+logret_rus1 <- russell1$logretorno
+ret_rus1 <- russell1$retorno
+High_rus1 <- russell1$High
+```
+
+```{r, fig.align='center',size=6}
+# Gráfico - período 1
+par(mfrow = c(1,2))
+
+date_1ano <- as.Date(russell1$Date)
+
+plot(date_1ano,logret_rus1, type = "l", main = "Logretornos do Índice Russell 2000,\n 2019-2020 (Período 1)", ylab = "Logretornos", xlab="Tempo em dias")
+
+# Gráfico - período 2
+date=as.Date(as.character(russell$Date))
+
+plot(date, logret_rus, type = "l", main = "Logretornos do Índice Russell 2000,\n 2018-2020 (Período 2)", ylab = "Logretornos", xlab = "Tempo em dias")
+```
+
+
+ Pode-se notar que houve grande oscilação nos dados após o início do ano 2020. Tal fato, com grandes evidências, pode ter ocorrido por conta da pandemia de Covid-19, onde sabe-se que o primeiro caso de Covid-19 no Brasil foi registrado oficialmente no dia 26 de fevereiro de 2020 e a primeira morte registrada, dia 12 de março de 2020, dia em que houve o valor mínimo do logretorno no período em estudo. O valor máximo no período foi registrado dia 24 de março de 2020.
+ 
+```{r}
+
+min_data <- russell$Date[russell$logretorno == min(russell$logretorno)]
+max_data <- russell$Date[russell$logretorno == max(russell$logretorno)]
+
+
+min_data <- as.data.frame(min_data)
+max_data <- as.data.frame(max_data)
+
+datas <- cbind(min_data, max_data)
+
+names(datas) <- c("Logretorno mínimo","Logretorno máximo")
+
+kable(datas)%>%
+kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+
+As medidas resumo também confirmam tal suspeita, como mostra a tabela a seguir.
+
+
+
+```{r}
+# Medidas resumo e tabela comparativa entre os dois periodos
+
+media1<-mean(logret_rus1)
+varianc1<-var(logret_rus1)
+dp1<-sqrt(varianc1)
+periodo1 <- "Periodo 1"
+df_per1 <- data.frame(periodo1,media1, varianc1, dp1)
+
+media<-mean(logret_rus)
+varianc<-var(logret_rus)
+dp<-sqrt(varianc)
+periodo2 <- "Periodo 2"
+df_per2 <- data.frame(periodo2,media, varianc, dp)
+names(df_per2) <- names(df_per1)
+
+df_final <- rbind(df_per1, df_per2)
+names(df_final) <- c("Período", "Média", "Variância", "Desvio padrão")
+kable(df_final) %>%
+kable_styling(bootstrap_options = c("striped", "hover"))
+  
+```
+
+
+```{r, echo=FALSE}
+# Medidas resumo e tabela comparativa entre os dois periodos
+
+med_resumo1 <- summary(logret_rus1) 
+med_resumo2 <- summary(logret_rus)
+names(med_resumo1) <- names(med_resumo2)
+resumo_final <- rbind(med_resumo1, med_resumo2)
+rownames(resumo_final) <- c("Período 1", "Período 2")
+# kable(resumo_final)%>%
+# kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+Nota-se que o desvio padrão dos logretornos do Período 1 (durante a pandemia) é $0.008$ aproximadamente, enquanto do Período 2 (antes e durante a pandemia) é $0.013$. Ou seja, se for considerado apenas os dados durante a pandemia, o comportamento é relativamente estável, um padrão com menor variabilidade é observado em comparação aos logretornos antes e durante a pandemia, onde percebe-se maior variabilidade. Após ver o efeito da pandemia nos dados, optou-se por analisar o período que contempla as quotações do Índice Russell 2000 de 06 de fevereiro de 2018 a 05 de fevereiro de 2021 (Período 2).
+
+
+## O Índice MSCI
+
+  Para compor a análise de cópulas, é necessário no mínimo dois conjunto de dados. Sendo assim, foi escolhido um índice semelhante ao estudado anterioromente, o Índice Russell 2000 (EUA), porém, ele é composto por empresas de países emergentes, tais como Brasil e China. 
+  O índice MSCI é uma medida do desempenho do mercado de ações em uma determinada área ou representando um conjunto de ações globais que, juntas, apresentam uma característica em específico. Alguns dos exemplos do indice MSCI são os seguintes:
+  
+- **MSCI World** O índice mundial da MSCI mede o desempenho do mercado de empresas de grande e médio porte com presença global e em países desenvolvidos;
+
+- **MSCI ACWI** Ações de grande e médio porte do mundo, em 23 mercados desenvolvidos e 26 emergentes;
+
+- **MSCI Brazil** acompanha o desempenho de grandes e médias empresas brasileiras;
+
+- **MSCI Emerging Markets** Índice que acompanha o desempenho das bolsas de valores de 26 países emergentes;
+
+ O foco neste trabalho será analisar os dados do Índice MSCI (Emerging Markets), que como visto acima, é composto por ativos de 26 países emergentes. São os seguintes: Argentina, **Brasil**, Chile, **China**, Colômbia, República Tcheca, Egito, Grécia, Hungria, Índia , Indonésia, Coréia, Malásia, México , Paquistão, Peru, Filipinas, Polônia, Catar, Rússia, Arábia Saudita, África do Sul, Taiwan, Tailândia, Turquia e Emirados Árabes Unidos. Os dados também foram obtidos no Yahoo Finance, e no período de 06/02/2018 a 05/02/2021, mesmo periodo do Russell 2000.
+ 
+```{r, echo=FALSE}
+setwd(paste0(pasta_raiz,"./../data/raw"))
+msci <- read.csv("ECNS - Dados Históricos.csv", encoding = "UTF-8")
+
+## MSCI - criando variavel de logretorno (serao utilizados como padrao o logretorno) 
+msci$retorno <- msci$High/dplyr::lag(msci$High)
+msci$logretorno <- log(msci$retorno)
+msci$logretorno <- ifelse(is.na(msci$logretorno),0, msci$logretorno)
+
+## MSCI - selecionando as variaveis de estudo
+logret_msci <- msci$logretorno
+ret_msci <- msci$retorno
+High_msci <- msci$High
+
+```
+
+```{r, fig.align='center'}
+data_msci <- as.Date(msci$Date)
+plot(data_msci,logret_msci, type = "l", ylab = "Logretornos", xlab = "Tempo",
+     main = "Logretonos diários do\nÍndice MSCI (Emerging Markets), 2018-2021")
+```
+
+As estimações e análises de ambos conjuntos de dados serão obtidas por meio do logarítimo do retorno do ativo queé obtido pela diferença entre a máxima cotação no dia $i$ e a máxima cotação no dia anterior, $i-1$. A variável resultante é denominada _logretorno_ na base de dados.
+
+$$ logretornos = log\big(\frac{R_t}{R_{t-1}}\big) $$
+
+## Distribuição alpha-estável
+
+Segundo o Teorema 1 (Feller,1971), sejam $Y_1,Y_2,...,Y_n$ variáveis aleatórias estáveis independentes e identicamente distribuídas, então, para todo $n$,
+
+$$Y_1 + Y_2 + ... + Y_n =^d C_nY + D_n, $$
+em que $X$ também é uma variável aleatória estável, para qualquer constante $C_n>0$ e $D_n$. Isso significa que a variável aleatória $X$ mantém sua forma mesmo na adição. No caso em que $D=0$, a equação é chamada de estritamente estável. Em geral, elas não possuem forma fechada para a suas densidades e função de densidade acumulada.
+As distribuições alpha estáveis são descritas para quatro parâmetros: $(\alpha,\beta,\sigma,\mu)$. O fato dela ter 4 parâmetros permite maior adequabilidade a situações mais variadas e uma maior generalidade também, por exemplo, com uma certa combinação dos valores dos parâmetros, pode-se obter a distribuição Cauchy, a Normal ou a Levy1/2, que são alguns casos particulares. O parâmetro $\alpha$ é chamado de índice de estabilidade ou expoente característico, ele define o nível de instensidade local, $\alpha \in (0,2]$; Mesmo que os exemplos sejam distribuições simétricas, as alpha estáveis também podem ser assimétricas. Tal fato ocorre pelo parâmetro $\beta$ ser o responsável por ajustar a simetria: se $\beta=0$ a distribuição é simétrica, se $\beta = |1|$, a distribuição é assimétrica positiva, e se $\beta = -1$, a distribuição é assimétrica negativa, $\beta \in [-1,1]$. Os parâmetros $\alpha$ e $\beta$ determinam a forma da distribuição. $\gamma$ é parâmetro de disperção ou escala, $\gamma>0$ e $\delta$ é parâmetro de locação, $\delta \in (-\infty, \infty)$. 
+  A distribuição Normal, mesmo sendo mais conhecida, ela é limitada no ajuste quando tem-se dados com variância (segundo momento) infinita(o), ou seja, para $Y\sim Normal(0,1)$, $E(Y)²=\infty$. Tal fato é comum de ocorrer em dados reais, como por exemplo em dados financeiros, nos quais há uma forte característica de volatilidade das informações, e consequentemente, apresentam variância infinita. Este é um dos casos em que as distribuições alpha-estáveis são devidamente apropriadas para uma modelagem.
+
+### Estimação dos parâmetros
+
+  Ao ajustar uma alpha-estável para os logretornos em questão, as estimativas dos parâmetros para o índice russell 2000 foram: $\alpha=1,213$, $\beta = 0,03$, $\gamma=0,008152404$ e $\delta=0,001195213$. Já os parâmetros do MSCI foram estimados com os seguintes valores:  $\alpha=1,681$, $\beta = 0,059$, $\gamma=0,0082$ e $\delta=0,000089$. O $\alpha<2$ em ambos os casos mostra que a variância desses dados é infinita, o que corrobora para o ajuste de uma alpha-estável ou outra distribuição que assume esse pressuposto, e não a normal em que os dados precisam ter variância finita.
+  
+```{r,fig.align='center'}
+## ajustes dos parametros metodo os quantis
+(st1<-stableFit(logret_rus, "q",doplot = TRUE))
+```
+```{r,fig.align='center'}
+## ajustes dos parametros metodo os quantis
+(st2<-stableFit(logret_msci, "q",doplot = TRUE))
+```
+
+
+```{r,echo=FALSE}
+par.est_r<-st1@fit$estimate
+alpha.est_r<-par.est_r[1] ; beta.est_r<-par.est_r[2]
+gamma.est_r<-par.est_r[3] ; delta.est_r<-par.est_r[4]
+```
+
+
+```{r,echo=FALSE}
+par.est_m<-st2@fit$estimate
+alpha.est_m<-par.est_m[1] ; beta.est_m<-par.est_m[2]
+gamma.est_m<-par.est_m[3] ; delta.est_m<-par.est_m[4]
+```
+
+Aparentemente, a distribuição da variável logretorno assemelha-se a uma normal. Por esta ser mais conhecida, há uma certa tendência na tentativa de ajustar esta distribuição. Porém, atentando-se aos detalhes, uma distribuição normal não seria a que melhor representaria a classe de dados financeiros, visto que esses apresentam grande volatilidade, podendo assumir valores máximos e mínimos distoantes do comportamente padrão da variável e com pequena probabilidade. Porém, são justamente esses máximos e mínimos os valores mais interessantes do ponto de vista financeiro. Em ações, são nos máximos e mínimos onde ocorrem maior aporte em dinheiro ou maior perda. Distribuições que apresentam maior sensibilidade em modelar dados na calda (onde estão localizados os valores máximos e mínimos) são mais adequadas nesses casos, como a distribuição alpha-estável ou as distribuições extremais, como a GEV, a Gumbel, Fréchet e Weibull, que futuramente serão objetos de análise. O histograma a seguir apresenta distribuição dos logretornos do Índice Russell 2000 e MSCI com o ajuste das distribuições Normal e Alpha-Estável.
+
+
+
+```{r, fig.align='center'}
+
+x <- logret_rus
+
+par(mfrow=c(1,2))
+
+hist_dados<-hist(x,n=50, prob=T,ylim=c(0,50),main = "Histograma dos logretornos -\nRussell 2000", ylab = "Densidade",xlab="Logretorno")
+lines(seq(min(x,na.rm=T),max(x,na.rm=T),length=1000),
+      dnorm(seq(min(x,na.rm=T),max(x,na.rm=T),
+      length=1000),mean(x,na.rm=T),sd(x,na.rm=T)),lwd=2)
+
+curve(dstable(x, alpha=alpha.est_r, beta =beta.est_r,
+              gamma =gamma.est_r, delta = delta.est_r),
+      -1, 1,add=TRUE)
+
+x <- logret_msci
+
+hist_dados<-hist(x,n=50, prob=T,ylim=c(0,50),main = "Histograma dos logretornos -\nMSCI", ylab = "Densidade",xlab="Logretorno")
+lines(seq(min(x,na.rm=T),max(x,na.rm=T),length=1000),
+      dnorm(seq(min(x,na.rm=T),max(x,na.rm=T),
+      length=1000),mean(x,na.rm=T),sd(x,na.rm=T)),lwd=2)
+
+curve(dstable(x, alpha=alpha.est_m, beta =beta.est_m,
+              gamma =gamma.est_m, delta = delta.est_m),
+      -1, 1,add=TRUE)
+
+
+
+```
+
+
+
+ Apesar de feita a definição da distribuição alpha-estável e de um bom ajuste - melhor ajuste no RUSSELL do que no MSCI -, a escolha de tal distribuição não é a mais adequada pois para ajustar a distribuição alpha-estável, requer que os dados sejam independentes, fato que não é característico de dados financeiros. Devido a isso, as demais distribuições extremais são mais adequadas, sendo assim, será prosseguido o ajuste com elas.
+ 
+ 
+ 
+### Blocos máximos
+
+  Como ja mencionado anteriormente, para análises financeiras, principlamente em índices ou ações, os dados por serem temporais, nota-se a presença de correlação. Para a devida analise de dados temporais e altamente correlacionados, existe a análise de Séries Temporais, com técnicas que partem destes pressupostos. Já para o objetivo das distribuições extremais, a caracteristica de dependência entre os dados não pode ser considferada, pois as distribuições extremais têm como pressuposto a independência entre os dados. Para corrigir tal característica, a construções de blocos máximos permite tranformar dados auto-correlacionados em dados independentes,dividindo os dados em blocos do mesmo tamanho e pegando apenas o valor máximo de cada bloco. Além disso, em dados financeiros, há grande interesse em modelar dados os valores máximos ou mínimos de $X_i, i=1,..,T$, isto é, $max(X_1,...,X_t)$ ou $min(X_1,...,X_t)$; e entender seu comportamento. Dessa forma, o critério de blocos máximos é uma forma de selecionar apenas os maiores valores dentre as observações, ou seja, as informações que realmente interessam em dados financeiros; e ajustá-los de acordo com alguma distribuição adequada, como por exemplo, a GEV.  
+
+O critério dos blocos máximos consiste em dividir as $M$ observações  em blocos de tamanho $N$, e para cada bloco selecionar apenas o valor máximo dentre as $N$ observações, resultando assim, em uma subpopulação de máximos neste trabalho denominada $M_T$.
+
+$$M_T = \{x_1,...,x_N | x_{(N+1)},...,x_{2N}|x_{(\tau-1)N+1},...,x_{\tau N} \}$$
+
+A escolha do tamanho ótimo de N, deve ser feita de forma que as observações dos máximos sejam independentes. Caso elas fossem dependentes, as observações seriam uma série temporal, e nesse caso, as estimações e modelagens deveriam ser para esse objetivo. 
+
+
+Para os dados em questão, foi realizado um teste de independência de Ljung-Box com $95\%$ de confiança, variando o $N$ de 25 a 40 observaçõs em um bloco para os indices Russell 2000 e MSCI. As tabelas abaixo mostram, as 10 primeiras quantidades de dias dentro de um bloco, para o qual a hipótese de independência dos dados não é rejeitada com 95\% de confiança. 
+
+
+Tamanhos de blocos que não rejeitaram independência dos dados para o Índice Russell 2000:
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+ret <- logret_rus
+N<-length(ret) 
+result <- data.frame() 
+
+for (k in 1:44) {
+  
+  # calculando blocos maximos
+  n<-k
+  tau<-floor(N/n)
+  m<-numeric(tau) ; j<-1
+  for (i in 1:tau){
+    m[i]<-max(ret[j:(j+n-1)])
+    j<-j+n }
+  m<-m[-1]
+  
+  # aplicando o teste de hipotese na k-ésima observacao
+  teste<-Box.test(m, lag = 1, 
+                  type = c("Box-Pierce", "Ljung-Box"), 
+                  fitdf = 0)
+  teste$indice <- k
+  
+  # salvando apenas variaveis de interesse
+  teste <- c(teste$indice,teste$p.value)
+  
+    #verificando se a k-ésima variavel foi nao-rejeitada
+  if(teste[2]>0.05){
+  
+    result <- rbind(result, teste)
+    
+  }
+
+  #print(k)
+}
+
+
+```
+
+
+```{r}
+
+result1 <- as_tibble(result)
+names(result1) <- c("Tamanho do bloco","P-valor (teste de Ljung-Box)")
+kable(result1) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+
+Tamanhos de blocos que não rejeitaram independência dos dados para o Índice MSCI:
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+ret <- logret_msci
+N<-length(ret) 
+result <- data.frame() 
+
+for (k in 1:13) {
+  
+  # calculando blocos maximos
+  n<-k
+  tau<-floor(N/n)
+  m<-numeric(tau) ; j<-1
+  for (i in 1:tau){
+    m[i]<-max(ret[j:(j+n-1)])
+    j<-j+n }
+  m<-m[-1]
+  
+  # aplicando o teste de hipotese na k-ésima observacao
+  teste<-Box.test(m, lag = 1, 
+                  type = c("Box-Pierce", "Ljung-Box"), 
+                  fitdf = 0)
+  teste$indice <- k
+  
+  # salvando apenas variaveis de interesse
+  teste <- c(teste$indice,teste$p.value)
+  
+    #verificando se a k-ésima variavel foi nao-rejeitada
+  if(teste[2]>0.05){
+  
+    result <- rbind(result, teste)
+    
+  }
+
+  #print(k)
+}
+
+
+```
+
+
+```{r}
+
+result2 <- as_tibble(result)
+names(result2) <- c("Tamanho do bloco","P-valor (teste de Ljung-Box)")
+kable(result2) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+
+```
+
+
+A tabela acima mostra o tamanho do bloco (quantas observações foram consideradas no bloco) e o P-valor do teste de independência de Ljung-Box. Como já mencionado anteriormente, deseja-se o menor tamanho do bloco para os quais as observações sejam independentes. Nota-se que o tamanho de bloco $N=28$ foi o primeiro caso em que o teste não rejeitou independência entre as observações considerando 5% de nível de significância, pois com $N=27$ o p-valor é $0,04$ e encontra-se na região de rejeição. Porém, o diagnóstico dos resíduos, na seção de estimação dos parâmetros, levantou fortes evidências que esse não seria um bom ajuste. Tal fato se repetiu de $N=31$ até $N=36$, casos que não haviam hip´poteses para rejeitar a independência dos dados porém não mostravam a melhor opção de ajuste tendo como referência a análise de resíduos. Tomando o tamanho do bloco $N=37$, o diagnóstico de resíduos mostrou melhor ajuste dos dados, sendo esse então, o tamanho considerado no estudo. Como são 755 observações, e tamanho do bloco = $26$, resultou em $29$ blocos - valor contem arredondamento.
+
+O histograma abaixo mostra a distirbuição dos máximos, resultando em aproximadamente 18 blocos, dado que são 755 observações.
+
+
+
+```{r}
+ret <- russell$logretorno
+N <- length(ret) ; n <- 26 # tamanho do bloco
+tau <- floor(N/n) # numero de blocos = 20
+m <- numeric(tau) ; j<-1
+for (i in 1:tau){
+  m[i]<-max(ret[j:(j+n-1)])
+  j<-j+n }
+m<-m[-1]
+
+m_rus <- m
+```
+
+```{r,echo=FALSE,fig.height=6,fig.align='center'}
+plot.new() 
+par(mfrow=c(1,2))
+{hist(m_rus, prob=T,
+      ylim=c(0,60), 
+      main = "Histograma dos máximos dos\nblocos de 37 dias da cotação\ndo Russell 2000 (EUA)",
+      ylab = "Densidade",xlab = "Logretornos")
+  lines(density(m_rus))}
+plot(m_rus, type="l",main="Valores máximos do\nÍndice Russell 2000 (EUA)", ylab="Logretornos") #Some extremes
+
+```
+```{r, echo=FALSE}
+## blocos maximos msci
+
+ret_m <- msci$logretorno
+N <- length(ret_m) ; n <- 26 # tamanho do bloco
+tau <- floor(N/n) # numero de blocos = 20
+m <- numeric(tau) ; j<-1
+for (i in 1:tau){
+  m[i]<-max(ret_m[j:(j+n-1)])
+  j<-j+n }
+m<-m[-1]
+
+m_msci <- m
+```
+
+
+```{r, echo=FALSE,fig.align='center'}
+#plot.new() 
+par(mfrow=c(1,2))
+{hist(m_msci, 
+      prob=T,
+      ylim=c(0,60),
+      main = "Histograma dos máximos dos\nblocos de 37 dias da cotação\ndo MSCI",
+      ylab = "Densidade",xlab = "Logretornos")
+  lines(density(m_msci))}
+plot(m_msci, type="l",main="Valores máximos\ndo Índice MSCI", ylab="Logretornos") #Some extremes
+
+```
+
+
+ 
+ 
+## Generalized Extreme Value (GEV)
+  
+  Segundo o Teorema 2 (Von Mises (1954) e Jenkinson (1955)), $X_t$ uma sequência de variáveis aleatórias i.i.d com função de distribuição F e $M_T=max(X_1,X_2,...,X_T)$. Se exsistem sequências de contante s$a_n>0$ e $b_n \in R$ tais que:
+ 
+ $$P\big(\frac{M_T-b_n}{a_n}\le x\big) \to G(x)$$ quando $n \to \infty$, em que G é uma função de distribuição não degenerada, portanto G é membro da família GEV dada por:
+ 
+![](gev.png)
+ 
+ Para as análises da distribuição GEV, serão considerados os logretornos em dólar de ambos os índices.
+ 
+### Estimação dos parâmetros
+
+#### 1) Estimação por Máxima Verossimilhança
+
+Segundo Bolfarine (2001), sejam $X_1$,..., $X_n$ uma amostra aleatória de tamanho n da variável aleatória $X$ com função de densidade (ou de probabilidade) $f(x|\theta)$, com $\theta$ $\in$ $\Theta$, onde $\Theta$ é o espaço paramétrico. A função de verossimilhança de $\theta$ correspondente à amostra aleatória observada é dada por
+
+$$ L(\theta;x)= \prod_{i=1}^{n}f(x_i|\theta) $$
+E assim, o estimador de máxima verossimilhança de $\theta$ é o valor $\hat{\theta}$ $\in$ $\Theta$ que maximiza a função de verossimilhança $L(\theta; x)$.
+O logaritmo natural da função de verossimilhança de $\theta$ é denotado por
+
+$$l(\theta;x)=log L(\theta;x)$$
+
+
+```{r, echo=TRUE}
+# russell
+
+fit_rus <- fevd(m_rus,type="GEV")
+par_gev_r<- as.data.frame(fit_rus$results$par)#positive shape estimate but 
+par_gev_r$parametros <- c("mu","sigma","csi")
+row.names(par_gev_r) <- NULL
+
+par_gev_r$parametros <- factor(par_gev_r$parametros, 
+                             levels=c("csi","mu","sigma"))
+par_gev_r <- par_gev_r[order(par_gev_r$parametros),]
+par_gev_r <- par_gev_r[,c(2,1)]
+row.names(par_gev_r) <- NULL
+names(par_gev_r) <- c("Parâmetros","Russell")
+
+# msci
+
+fit_msci <- fevd(m_msci,type="GEV")
+par_gev_m<- as.data.frame(fit_msci$results$par)#positive shape estimate but 
+par_gev_m$parametros <- c("mu","sigma","csi")
+row.names(par_gev_m) <- NULL
+par_gev_m$parametros <- factor(par_gev_m$parametros, 
+                               levels=c("csi","mu","sigma"))
+par_gev_m <- par_gev_m[order(par_gev_m$parametros),]
+par_gev_m <- par_gev_m[,c(2,1)]
+row.names(par_gev_m) <- NULL
+names(par_gev_m) <- c("Parâmetros","MSCI")
+
+
+```
+
+#### 2) Método dos momentos ponderados para Gumbel
+
+Pelo método dos momentos ponderados para Gumbel os parâmetros estimados apresentaram os seguintes valores:
+
+```{r}
+## R PWM - GEV
+fitpwm_rus = gevFit(m_rus, type ="pwm")
+par_pwm_rus <- as.data.frame(fitpwm_rus@fit$par.ests)
+rownames(par_pwm_rus) <- c("csi","mu","sigma")
+par_pwm_rus$Parametros <- rownames(par_pwm_rus)
+rownames(par_pwm_rus) <- NULL
+par_pwm_rus <- par_pwm_rus[,c(2,1)]
+names(par_pwm_rus) <- c("Parâmetros","Russell")
+
+
+fitpwm_msci = gevFit(m_msci, type ="pwm")
+par_pwm_msci <- as.data.frame(fitpwm_msci@fit$par.ests)
+rownames(par_pwm_msci) <- c("csi","mu","sigma")
+par_pwm_msci$Parametros <- rownames(par_pwm_msci)
+rownames(par_pwm_msci) <- NULL
+par_pwm_msci <- par_pwm_msci[,c(2,1)]
+names(par_pwm_msci) <- c("Parâmetros","MSCI")
+
+
+
+
+```
+
+Em uma primeira tentativa, notou-se que a estimação dos parâmetros pela distribuição GEV para os dados do Russell não foi muito adequada, por isso, optou-se por utilizar como método de estimação o método dos momentos ponderados apenas para os dados do Russell 2000. Já a estimação por máxima verossimilhança aprensentou adequado ajuste para os dados do MSCI, onde será visto na seção de ajuste do modelo. A tabela abaixo mostra o ajuste do Russell por máxima verossimilhnaça, e em seguida por momentos ponderados.
+
+
+```{r}
+par_gev_final <- merge(par_gev_r, par_gev_m, by="Parâmetros")
+
+kable(par_gev_final) %>%
+ kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+
+```{r}
+par_pwm <- merge(par_pwm_rus,par_pwm_msci, by= "Parâmetros")
+
+kable(par_pwm) %>%
+ kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+### Ajuste do modelo
+
+Como mostram os gráficos abaixo, note-se que a curva de dados ajustados se assemelha à curva de dados empíricos apenas para os dados do MSCI quando atribui aos dados a distribuição GEV, pois no caso do Russell, não houve ajuste da melhor forma. Diante disso, foram feitos testes onde ajustou-se os dados do Russell com máxima verossimilhança à GEV, momentos ponderados com a GEV, e máxima verossimilhança com a Weibull. O primeiro gráfico abaixo mostra o ajuste dos dados nos respectivos casos citados acima.
+
+
+#### 1) Máxima verossimilhança - GEV
+```{r, echo=TRUE,fig.align='center'}
+# Máxima verossimilhança gev
+plot(fit_rus)
+#summary(fit_rus)
+```
+
+#### 2) Momentos ponderados - GEV
+```{r, fig.align='center'}
+# summary(fitpwm_rus)
+# par(mfrow=c(2,2))
+# plot(fitpwm_rus)
+```
+
+
+![](pwmrus.png)
+
+#### 3) Máxima verossimilhança - Weibull
+```{r,fig.align='center'}
+# máxima verossimilhança weibull 
+
+library(fitdistrplus)
+fw <- fitdist(m_rus, "weibull")
+summary(fw)
+
+plot(fw)
+```
+
+Tendo como critério a escolha em que os residuos ajustados mais se adequam aos residuoes empíricos, escolheu-se o ajuste por meio dos momentos ponderados utilizando a distribuição GEV. Já para os dados do MSCI, houve bom ajuste à GEV por meio da estimação por máxima verossimilhança, como pode-se notar pela densidade empirica e ajustada, e pelo grafico dos quantis, que se ajustam a curva da exponencial. 
+
+
+#### 4) Máxima verossimilhança - GEV
+
+```{r, fig.align='center'}
+plot(fit_msci)
+```
+Tendo adequado os ajustes, o intervalo de confiança com $95\%$ de confiança para as estimativas dos parâmetros do MSCI é dada por: 
+
+```{r}
+ci<-ci(fit_msci,type="parameter")
+rownames(ci) <- c("mu","sigma","psi")
+rownames(ci) <- factor(rownames(ci), levels = c("psi","mu","sigma"))
+ci <- ci[order(rownames(ci)),]
+ci
+
+
+```
+Os parâmetros estimados, no caso do Russell por momentos ponderados, e no caso do MSCI por máxima verossimilhança, ambos à distribuição GEV, são dados por:
+
+
+
+```{r, echo=FALSE}
+# guardando resultados
+mu_r <- par_pwm_rus$Russell[par_pwm_rus$Parâmetros == "mu"]
+sigma_r <- par_pwm_rus$Russell[par_pwm_rus$Parâmetros == "sigma"]
+csi_r <- par_pwm_rus$Russell[par_pwm_rus$Parâmetros == "csi"]
+
+# guardando resultados
+mu_m <- par_gev_m$MSCI[par_gev_m$Parâmetros == "mu"]
+sigma_m <- par_gev_m$MSCI[par_gev_m$Parâmetros == "sigma"]
+csi_m <- par_gev_m$MSCI[par_gev_m$Parâmetros == "csi"]
+```
+
+
+  |Parâmetro  | Russell           |MSCI           
+  |-----------|-----------------|----------------
+  |  $\xi$    | $0,3442367$     | $0,1066109$    
+  |  $\mu$    | $0,01893071$    | $0,0256341$ 
+  |  $\sigma$ | $0,008363815$   | $0,007891253$    
+
+
+
+### Cálculo do Value at Risk (VaR)
+
+O Value at Risk (VaR) é um quantil na distribuição para o qual valores maiores que essa quantil são considerados rentáveis, caso do quantil positivo, ou de grande perda, caso do quantil negativo. O quadro abaixo mostra o VaR histórico, normal e alpha-estavel para os logretornos, considerando o nível de confiança de $0,9$, $0,95$, $0,975$, $0,990$ e $0,999$.
+
+Os níveis de retorno mostram os retornos que se terão nos determinados tempos, como pode se ver a seguir para o MSCI e Russell, respectivamente:
+
+Russell 2000:
+```{r}
+return.level(fit_msci,do.ci=T, alpha = 0.1)
+return.level(fit_msci,do.ci=T,alpha = 0.05)
+return.level(fit_msci,do.ci=T,alpha = 0.0275)
+return.level(fit_msci,do.ci=T,alpha = 0.001)
+```
+MSCI:
+```{r}
+return.level(fit_rus,do.ci=T, alpha = 0.1)
+return.level(fit_rus,do.ci=T,alpha = 0.05)
+return.level(fit_rus,do.ci=T,alpha = 0.0275)
+return.level(fit_rus,do.ci=T,alpha = 0.001)
+```
+Em ambos os casos, o nível de retorno tende a aumentar com o passar dos anos.
+
+### Domínio de atração maximal
+
+Pelo Teorema 1 de Fisher-Tippett (1928), se $X_1, ..., X_n$ são variáveis aleatórias i.i.d e se existem constantes $c_n>0$ e $d_n\in R$,
+
+$$\lim_{n\to\infty}P\big(\frac{X_{(n)}-d_n} {c_n}\le x\big) = H(x),$$
+para alguma função não degenarada G, então g é do mesmo tipo de uma das três distribuições seguintes:
+
+![](dominio_atraao.png)
+
+O objetivo é ajustar $M_T$ de forma que $M_T \sim GEV$, isto é que $D_{max}(M_T)\sim GEV$. Uma das formas de saber a distirbuição maximal dos dados é por meio do formato do gráfico QQplot que analisa os quantis empiricos versus os quantis da distribuição Gumbel $(\Delta)$. Caso os quantis empiricos estajam sobre a reta dos quantis da distribuição Gumbel, há fortes indícios que $D_{max}(M_T)\sim \Delta$, isto é, a própria Gumbel, e nesse caso o parâmetro $\xi=0$. Caso os quantis formem uma curvatura acima da reta dos quantis da distribuição Gumbel, as evidências apontam para que o $D_{max}(M_T)\sim \phi_\alpha$ (Fréchet), e $\xi>0$. Por fim, se os quantis empíricos ficam abaixo da reta, então $D_{max}(M_T)\sim \psi_\alpha$ (Weibull Negativa). 
+
+- Se $\xi>0$, $D_{max}(M_T)\sim\phi_{\alpha}$;
+- Se $\xi<0$, $D_{max}(M_T)\sim\psi_{\alpha}$;
+- Se $\xi=0$, $D_{max}(M_T)\sim\Delta$;
+
+Como no gráfico os quantis empíricos estão em média acima dos quantis teoricos da gumbel, e $\xi \approx 0,0,34$ (Russell) e $\xi \approx 0,11$ (MSCI), então o domínio de atração maximal de ambos os dados são a distribuição Fréchet $D_{max}(M_T)\sim \phi_\alpha$. 
+
+```{r, fig.align='center'}
+p<-c((1:tau)/(tau+1)) ; ginv<- -log(-log(p))
+par(mfrow=c(1,2))
+qqplot(m_rus,ginv,xlab="Quantis empíricos",ylab="Quantis da Gumbel",
+       main="Quantis empíricos\nvs Quantis da Gumbel") ; grid()
+qqplot(m_msci,ginv,xlab="Quantis empíricos",ylab="Quantis da Gumbel",
+       main="Quantis empíricos\nvs Quantis da Gumbel") ; grid()
+```
+
+## Cópulas - Russell 2000 E MSCI (Emerging Markets)
+
+### Definições de Cópulas
+
+Definição 1 - Uma função cópula $n$-dimenisonal é uma função $C:[0,1]^n \to [0,1]$ que satisfaz as seguintes condições,
+
+1. $C$ é não descresente e contínua à direita em cada componente.
+
+2. Para cada índice $k=1,2,...,n$ tem-se que
+
+$$\lim_{u_k \to 0^+} C(u_1,u_2,...,u_{k-1},u_{k},u_{k+1},...,u_n)=0$$
+e
+
+$$\lim_{\forall k, u_k \to 1^-} C(u_1,u_2,...,u_{k-1},u_{k},u_{k+1},...,u_n)=1$$
+
+3. $Vol_{C(S_1xS_2x,...,xS_n)}\ge 0, \forall S_k = (a_k,b_k] \subseteq \bf{I} = [0,1], k=1,2,...,n$ 
+
+4. A $i$-ésima função marginal da cópula é escrita por:
+
+$$C(u_i) = \lim_{\forall k \ne i, u_k \to 1^-} C(u_1,...,u_{i-1},u_i,u_{i+1},...,u_n)$$
+$$= C(1,1,...,1,u_k,1,...,1)$$
+$$= u_i$$
+Definição 2 - Uma cópula bidimensional $C:[0,1]X[0,1] \to [0,1]$ é uma função que satisfaz:
+
+i) $C$ é não descresente em cada componente;
+ii) $C$ é contínua à direita em cada componente;
+iii) $\lim_{u \to 1, v \to 1} C(u,v)=1$, $\lim_{u \to 0} C(u,v)=0$ ou $\lim_{v \to 1} C(u,v)=0$ e $\lim_{u \to 1} C(u.v)=C(v)=v$, $\lim_{v \to 1} C(u.v)=C(u)=u$; marginais uniformes $[0,1]$
+iv) $vol([a_1,b_1]X[a_2,b_2]) \ge 0$, sendo $[a_1,b_1]X[a_2,b_2] \subset [0,1]^2$. Então $vol([a_1,b_1]X[a_2,b_2])=C(a_1,a_2)+C(b_1,b_2)-C(a_1,b_2)-C(a_2,b_1)$ 
+
+#### Teorema de Sklar (Sklar, 1973)
+
+Teorema 1 - Seja $F_{\bf{X}}$ a função de distribuição multivariada com marginais $F_1, F_2, ..., F_n$. Então existe uma cópula $C$ tal que para todo $(x_1,x_2,...,x_n) \in R^n$,
+
+$$F(x_1,x_2,...,x_n)=C(F_1(x_1),F_2(x_2),...,F_n(x_n))$$
+Se $F_1,F_2,...,F_n$ são todas absolutamente contínuas, então $C$ é única, caso contrário, $C$ é unicamente determinada em $RanF_1$ x $RanF_2$ x $...$ x $RanF_n$. So sentido contrário, se $C$ é uma função cópula $n$-dimenisonal e $F_1,F_2,...,F_n$ são funções de distribuição, então a função $F$ definida acima é uma distribuição multivariada $n$-dimensional com marginais $F_1,F_2,...,F_n$.
+
+
+#### Análise bivariada
+
+O gráfico a seguir apresenta a análise conjunta dos dados dos índices Russell e MSCI, primeiramente o blocos máximos e em seguido os logretornos.
+
+```{r, fig.align='center'}
+par(mfrow = c(1,2))
+plot(m_rus, m_msci, main = "Blocos máximos de\nRussell e MSCI", xlab = "Russell", ylab = "MSCI")
+
+plot(logret_msci, logret_rus, main = "Logretornos de\nRussell e MSCI", xlab = "Russell", ylab = "MSCI")
+
+```
+
+#### Tau de Kendall (Nelsen, 2007)
+
+Teorema (Tau de Kendall) , Vamos denotar $(X_1,Y_1)$ e $(X_2,Y_2)$ vetores de variáveis aleatórias contínuas independentes com funções de distribuição conjunta $H_1$ e $H_2$, respectivamente, com marginais comuns $F(x_1)$ e $F(x_2)$; e $G(y_1)$ e $G(y_2)$. Vamos denotar $C_1$ e $C_2$ cópulas $(X_1,Y_1)$ e $(X_2,Y_2)$, respectivamente, então $H_1(x,y) = C_1(F(x),G(y))$ e $H_2(x,y)=C_2 (F(x),G(y))$. Seja $Q$ denotado como a diferença entre as probabilidades de concordancia and discordancia de $(X_1,Y_1)$ e $(X_2,Y_2)$, i.e., 
+$$Q = P[(X1 - X2)(Y1 - Y2) \ge 0]- P[(X1 - X2)(Y1 - Y2) \le 0]$$.
+
+
+Dado os resultados obtidos pelas estimações e aplicando o tau de Kendall para obter a correlação entre os dados, a correlação obtida pelos dados de blocos máximos relamente foi maior que se forem usados apenas os logretornos, com os seguintes resultados:
+
+
+```{r, echo=FALSE}
+
+a.0 <- sin(cor(logret_msci,logret_rus, method = "kendal")*pi/2)
+a.1 <- sin(cor(m_msci,m_rus, method = "kendal")*pi/2)
+a.2 <- data.frame(a.0,a.1)
+names(a.2) <- c("Logretornos","Blocos máximos")
+rownames(a.2) <- "Correlação "
+
+kable(a.2) %>%
+ kable_styling(bootstrap_options = c("striped", "hover"))
+
+
+```
+
+
+## Cópulas estimadas
+
+Os parâmetros das cópulas foram estimados peça função _fitCopula_ do pacote _copula_ no _softwere_ R.
+
+```{r, warning=FALSE, message=FALSE}
+start <- c(a.0)
+
+require(TLMoments)
+udat <- cbind(pgev(m_rus, scale = csi_r, loc = mu_r, shape = sigma_r),
+              pgev(m_msci, scale = csi_m, loc = mu_m, shape = sigma_m))
+
+myCop.clayton <- claytonCopula(dim = 2)
+myCop.frank <- frankCopula(dim = 2)
+myCop.gumbel <- gumbelCopula(dim = 2)
+
+fit_clayton <- fitCopula(myCop.clayton, udat, start = a.0)
+fit_frank <- fitCopula(myCop.frank, udat, start = a.0)
+fit_gumbel <- fitCopula(myCop.gumbel, udat, start = a.0)
+
+# maxima verossimilhança
+ll_clayton <- fit_clayton@loglik
+ll_gumbel <- fit_gumbel@loglik
+ll_frank <- fit_frank@loglik
+
+ll_final <- data.frame(ll_clayton,ll_gumbel, ll_frank)
+
+# alpha
+par_cleyton <- fit_clayton@estimate
+par_frank <- fit_frank@estimate
+par_gumbel <- fit_gumbel@estimate
+
+alpha_final <- data.frame(par_cleyton,par_gumbel,par_frank)
+
+## AIC = 2- 2 * LL ;
+aic_clayton <- 2 - 2*ll_clayton
+aic_gumbel <- 2 - 2*ll_gumbel # menor
+aic_frank <- 2 - 2*ll_frank
+
+aic_final <- data.frame(aic_clayton,aic_gumbel,aic_frank) 
+
+##BIC = log(n) - 2 * LL
+bic_clayton <- log(n) - 2*ll_clayton
+bic_gumbel <- log(n) - 2*ll_gumbel # menor
+bic_frank <- log(n) - 2*ll_frank
+
+bic_final <- data.frame(bic_clayton,bic_gumbel,bic_frank)
+
+names(ll_final) <- names(alpha_final) <- names(aic_final) <- names(bic_final)
+
+final <- rbind(alpha_final,ll_final, aic_final, bic_final)
+
+names(final) <- c("Cleyton","Gumbel","Frank")
+row.names(final) <- c("alpha","ll","aic","bic")
+
+```
+
+  |  Estimação|Cleyton        | Gumbel      | Frank 
+  |-----------|---------------|-------------|--------------
+  |  $\alpha$ | $19.74855$    | $18.69102$  | $51.25318$
+  |  $ll$     | $37.00985$    | $36.20245$  | $36.23730$
+  |  $AIC$    | $-72.01970$   | $-70.40490$ | $-70.47460$
+  |  $BIC$    | $-70.40878$   | $-68.79398$ | $-68.86368$
+
+Pelo critério do AIC e BIC, onde a melhor cópula é obtida quanto menor esses valores, tem-se que os dados seguem uma Cópula de Cleyton.
+
+
+#### Cópula de Cleyton
+
+```{r, echo=FALSE}
+cc <- claytonCopula(par_cleyton)
+sample1 <- rCopula (1000 , cc)
+
+gu <- gumbelCopula(par_gumbel)
+sample2 <- rCopula (1000 , gu)
+
+fr <- frankCopula(par_frank)
+sample3 <- rCopula (1000 , fr)
+
+n <- 1000
+x <- numeric(n)
+y <- numeric(n)
+
+for (i in 1:n) {
+
+  x[i] <- (mu_r - (sigma_r/csi_r))*(1-(-log(sample1[i,1]))^(-csi_r))
+  y[i] <- (mu_m - (sigma_m/csi_m))*(1-(-log(sample1[i,2]))^(-csi_m))
+
+}
+
+```
+
+
+```{r, echo=FALSE}
+par(mfrow = c(1,2))
+
+plot(sample1, xlab = "U", ylab = "V", pch = ".", main = "Cópula de Clayton", cex = 1.5)
+plot(x,y, xlab = "Marginal GEV - Copula de Cleyton", ylab = "Y", pch = ".", cex = 1.5)
+
+```
+
+
+Não houve ajuste adequado, de forma que a analise gráfica ficou prejudicada.
+```{r, echo=FALSE}
+par(mfrow = c(1,1))
+plot(m_rus, m_msci, pch = ". " , col="black", xlab="Russell" , ylab="MSCI" )
+points( x, y, ylab="Y", pch = ". ", col="red")
+legend("topright", legend=c("Dados Ajustados", "Dados reais"), col=c("red", "black"), pch = 15)
+
+```
+
+## Conclusões
+
+Os dados apresentam domínio de atração maximal da distribuição Fréchet. As cópulas seguem a distribuição da Cópula de Cleyton. Não houve um bom ajuste nos dados do índice Russell 2000 à distribuição GEV. Seria mais adequado o ajuste a uma Weibull.
+
+
+##########################
+
+
+
+
+## Referência 
+
+A.F. Jenkinson. The Frequency Distribution of the Annual Maximum (Minimum) Values of Meteorological Events. Quarterly Journal of the Royal, Meteorological Society, Vol.81, p.158 172,1955.
+
+Bolfarine, Heleno, and Mônica Carneiro Sandoval. Introdução à inferência estatística. Vol. 2. SBM, 2001.
+
+Feller, Robert L., Nathan Stolow, and Elizabeth H. Jones. On picture varnishes and their solvents. 1971.
+
+Fisher, R.A.; Tippett, L.H.C. (1928), "Limiting forms of the frequency distribution of the largest and smallest member of a sample", Proc. Camb. Phil. Soc., 24 (2): 180–190.
+
+Nelsen, Roger B. An introduction to copulas. Springer Science & Business Media, 2007.
+
+
+http://www.ppgest.ufscar.br/documentos/rt/rt247.pdf
+
+http://bibliotecadigital.fgv.br/dspace/bitstream/handle/10438/17015/Rafael%20Gonini%20Hernandez.pdf?sequence=1&isAllowed=y
+
+https://www.cmegroup.com/pt/education/featured-reports/equities-comparing-russell-2000-vs-sandp-500.html (comparando Russell 2000 com S&P500)
+
+https://conteudos.xpi.com.br/aprenda-a-investir/relatorios/o-que-sao-os-indices-msci-entenda-por-que-grandes-gestores-estao-sempre-de-olho-neles/
+
+https://www.remessaonline.com.br/blog/que-e-o-indice-msci/
+
+https://www.suno.com.br/artigos/msci/
+
+https://www.cmegroup.com/pt/education/featured-reports/russell-2000-small-companies-as-the-engine-of-job-growth.html
